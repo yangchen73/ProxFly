@@ -2,6 +2,8 @@ from __future__ import print_function, division
 
 import numpy as np
 import matplotlib.pyplot as plt
+import pybullet as p
+import pybullet_data
 
 from env.py3dmath import Vec3, Rotation  # get from https://github.com/muellerlab/py3dmath
 from env.vehicle import Vehicle
@@ -45,7 +47,7 @@ class QuadSimEnv(gym.Env):
         self.Deg2Rad = np.pi / 180
         self.dt = dt
         self.sim_freq = 500
-        self.ctrl_freq = 50
+        self.ctrl_freq = 300
         self.max_timestep = int(end_time/self.dt)
 
         with open('./env/large_quad.yaml', 'r') as file:
@@ -76,9 +78,11 @@ class QuadSimEnv(gym.Env):
         self.takeoff_time = takeoff_time
         self.hover_time = hover_time
         self.land_time = land_time
-
         #===================== Reset the environment =====================
         self.reset()
+
+        #========================= Render Initialization========================
+        self.renderInit()
     
     #===================================================================================
 
@@ -86,9 +90,7 @@ class QuadSimEnv(gym.Env):
         """Resets the environment."""
 
         self.quadcopter_initialize()
-        
         initial_obs = self.computeObs()
-        
         return initial_obs
     
     #===================================================================================
@@ -219,7 +221,7 @@ class QuadSimEnv(gym.Env):
                 self.motorCmds = self.lowLevelController.get_motor_force_cmd_from_rates(nn_action[0]*self.thrust_scale, Vec3(nn_action[1:]*self.rates_scale))
 
         self.quadcopter.run(self.dt, self.motorCmds)
-
+        self.renderUpdate()
         
         # Prepare the return values
         obs = self.computeObs()
@@ -229,9 +231,8 @@ class QuadSimEnv(gym.Env):
         self.lastThrustCmd = self.totalThrustCmd
         self.lastRatesCmd = self.totalRatesCmd
 
-
         return obs, reward, truncated
-
+    
     #===================================================================================
     
     def actionSpace(self):
@@ -321,3 +322,25 @@ class QuadSimEnv(gym.Env):
         else:
             return False
         # return False
+
+    #===================================================================================
+
+    def renderInit(self):
+        self.physicsClient = p.connect(p.GUI)  
+        p.setAdditionalSearchPath(pybullet_data.getDataPath())  
+        """
+        modify camera(), add later
+        """
+        self.quadcopterID = p.loadURDF("env/model/large_quad.urdf", self.quadcopter._pos.to_array().flatten(), useFixedBase=False)
+    #=================================================================================   
+     
+    def renderUpdate(self):
+        pos = self.quadcopter._pos.to_array().flatten()
+        orn = self.quadcopter._att.to_list()
+        p.resetBasePositionAndOrientation(self.quadcopterID, pos, orn)
+        p.stepSimulation()
+
+    #=================================================================================   
+
+    def renderClose(self):
+        p.disconnect()

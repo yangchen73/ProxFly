@@ -257,7 +257,10 @@ def ppo(env_fn,
         for t in range(steps_per_epoch):
             
             if ep_len % ctrl_every_sim_step == 0:
-                action, value, logp = actor_critic.step(torch.as_tensor(obs, dtype=torch.float32))
+                obs_his = torch.as_tensor(buffer.obs_buf[max(0, buffer.ptr - 400):buffer.ptr])
+                act_his = torch.as_tensor(buffer.act_buf[max(0, buffer.ptr - 400):buffer.ptr])
+                action, value, logp = actor_critic.step(obs_his, act_his)
+
                 fix_obs = obs
             
             # ---------------------------------- Define external forces -------------------------------------
@@ -314,7 +317,9 @@ def ppo(env_fn,
 
             if terminal or epoch_ended:
                 if timeout or epoch_ended:
-                    _, value, _ = actor_critic.step(torch.as_tensor(obs, dtype=torch.float32))
+                    obs_his = torch.as_tensor(buffer.obs_buf[max(0, buffer.ptr - 400):buffer.ptr])
+                    act_his = torch.as_tensor(buffer.act_buf[max(0, buffer.ptr - 400):buffer.ptr])
+                    _, value, _ = actor_critic.step(obs_his, act_his)
                 else:
                     value = 0
                 buffer.finish_path(value)
