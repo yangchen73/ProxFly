@@ -101,7 +101,7 @@ class MLPCritic(nn.Module):
 class VAE(nn.Module):
     def __init__(self, obs_act_dim, latent_dim, hidden_sizes, activation=nn.ReLU):
         super().__init__()
-        # 1D Convolutional layer: input shape [400, 24]
+        # input shape [400, 24], output shap [1, 393]
         self.conv1d = nn.Conv1d(in_channels=obs_act_dim, out_channels=1, kernel_size=8, stride=1)
         # MLP after convolution to produce latent dimension
         conv_out_size = (400 - 8 + 1)
@@ -109,10 +109,9 @@ class VAE(nn.Module):
         #self.decoder = mlp([latent_dim] + list(hidden_sizes[::-1]) + [obs_act_dim * 400], activation)
 
     def encode(self, obs_act_history):
-        # Apply convolution and reshape for MLP
         obs_act_history = obs_act_history.unsqueeze(0)
-        conv_out = self.conv1d(obs_act_history.permute(0, 2, 1))  # Ensure correct shape [batch, channels, seq_len]
-        conv_out_flat = conv_out.view(conv_out.size(0), -1)  # Flatten for MLP
+        conv_out = self.conv1d(obs_act_history.permute(0, 2, 1))  
+        conv_out_flat = conv_out.view(conv_out.size(0), -1)  
         z_params = self.encoder(conv_out_flat)
         mu, log_std = z_params.chunk(2, dim=-1)
         std = torch.exp(log_std)
@@ -126,32 +125,7 @@ class VAE(nn.Module):
         mu, std = self.encode(obs_act_history)
         z = self.reparameterize(mu, std)
         return z, mu, std
-'''
-class VAE(nn.Module):
-    def __init__(self, obs_dim, latent_dim, hidden_sizes, activation=nn.ReLU):
-        super().__init__()
-        self.encoder = mlp([obs_dim] + list(hidden_sizes) + [latent_dim * 2], activation)
-        self.decoder = mlp([latent_dim] + list(hidden_sizes[::-1]) + [obs_dim], activation)
 
-    def encode(self, obs):
-        z_params = self.encoder(obs)
-        mu, log_std = z_params.chunk(2, dim=-1)
-        std = torch.exp(log_std)
-        return mu, std
-
-    def decode(self, z):
-        return self.decoder(z)
-
-    def reparameterize(self, mu, std):
-        eps = torch.randn_like(std)
-        return mu + eps * std
-
-    def forward(self, obs):
-        mu, std = self.encode(obs)
-        z = self.reparameterize(mu, std)
-        recon_obs = self.decode(z)
-        return z, mu, std, recon_obs
-'''
 class MLPActorCritic(nn.Module):
     def __init__(self, observation_space, action_space, latent_dim=32,
                  hidden_sizes=(64, 64), activation=nn.LeakyReLU):
@@ -186,8 +160,8 @@ class MLPActorCritic(nn.Module):
             obs_recent = obs_his[-1]
             obs_act_his = torch.cat((obs_his, act_his), dim=-1) 
             z, _, _ = self.vae(obs_act_his)
-            z_obs_act = torch.cat((z, obs_recent.unsqueeze(0), act_recent.unsqueeze(0)), dim=-1)
-            pi = self.pi._distribution(z_obs_act)
+            combine = torch.cat((z, obs_recent.unsqueeze(0), act_recent.unsqueeze(0)), dim=-1)
+            pi = self.pi._distribution(combine)
             a = pi.sample()
             logp_a = self.pi._log_prob_from_distribution(pi, a)
             v = self.v(z) 
