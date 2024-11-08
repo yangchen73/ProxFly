@@ -68,6 +68,23 @@ class PPOBuffer:
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf, adv=self.adv_buf, logp=self.logp_buf)
         return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in data.items()}
 
+    def get_last_n(self, n=400):
+        """
+        Returns the last 'n' observations and actions
+        """
+        obs_his = self.obs_buf[max(0, self.ptr - n):self.ptr]
+        act_his = self.act_buf[max(0, self.ptr - n):self.ptr]
+        
+        if len(obs_his) < n:
+            obs_padding = np.zeros((n - len(obs_his), *obs_his.shape[1:]), dtype=np.float32)
+            obs_his = np.concatenate((obs_padding, obs_his), axis=0)
+        
+        if len(act_his) < n:
+            act_padding = np.zeros((n - len(act_his), *act_his.shape[1:]), dtype=np.float32)
+            act_his = np.concatenate((act_padding, act_his), axis=0)
+        
+        return torch.as_tensor(obs_his), torch.as_tensor(act_his)
+    
 def learning_curve_display(epoch, last_show_num, logger, eval_rew_list):
     mean_reward = np.mean(logger.epoch_dict['EpRet'])
     eval_rew_list.append(mean_reward)
@@ -257,10 +274,8 @@ def ppo(env_fn,
         for t in range(steps_per_epoch):
             
             if ep_len % ctrl_every_sim_step == 0:
-                obs_his = torch.as_tensor(buffer.obs_buf[max(0, buffer.ptr - 400):buffer.ptr])
-                act_his = torch.as_tensor(buffer.act_buf[max(0, buffer.ptr - 400):buffer.ptr])
+                obs_his, act_his = buffer.get_last_n(400)
                 action, value, logp = actor_critic.step(obs_his, act_his)
-
                 fix_obs = obs
             
             # ---------------------------------- Define external forces -------------------------------------
@@ -317,8 +332,7 @@ def ppo(env_fn,
 
             if terminal or epoch_ended:
                 if timeout or epoch_ended:
-                    obs_his = torch.as_tensor(buffer.obs_buf[max(0, buffer.ptr - 400):buffer.ptr])
-                    act_his = torch.as_tensor(buffer.act_buf[max(0, buffer.ptr - 400):buffer.ptr])
+                    obs_his, act_his = buffer.get_last_n(400)
                     _, value, _ = actor_critic.step(obs_his, act_his)
                 else:
                     value = 0

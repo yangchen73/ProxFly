@@ -146,16 +146,6 @@ class MLPActorCritic(nn.Module):
 
     def step(self, obs_his, act_his):
         with torch.no_grad():
-            obs_needed = 400 - obs_his.shape[0]
-            act_needed = 400 - act_his.shape[0]
-            if obs_needed > 0:
-                last_obs = obs_his[-1] if obs_his.shape[0] > 0 else torch.zeros(obs_his.shape[1], dtype=obs_his.dtype)
-                obs_his = torch.cat((last_obs.unsqueeze(0).repeat(obs_needed, 1), obs_his), dim=0)
-
-            if act_needed > 0:
-                last_act = act_his[-1] if act_his.shape[0] > 0 else torch.zeros(act_his.shape[1], dtype=act_his.dtype)
-                act_his = torch.cat((last_act.unsqueeze(0).repeat(act_needed, 1), act_his), dim=0)
-
             act_recent = act_his[-1]
             obs_recent = obs_his[-1]
             obs_act_his = torch.cat((obs_his, act_his), dim=-1) 
