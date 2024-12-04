@@ -125,7 +125,28 @@ class VAE(nn.Module):
         mu, std = self.encode(obs_act_history)
         z = self.reparameterize(mu, std)
         return z, mu, std
+    
+class MultiAgentProcessor(nn.Module):
+    def __init__(self, num_agents, input_size, hidden_sizes, output_size1 = 128, output_size2 = 16):
+        super(MultiAgentProcessor, self).__init__()
+        self.num_agents = num_agents
+        self.mlp1 = mlp([input_size] + hidden_sizes + [output_size1], activation=nn.ReLU)
+        self.mlp2 = mlp([output_size1] + hidden_sizes + [output_size2], activation=nn.ReLU)
 
+    def process_tensor(self, tensor):
+        agent_outputs = []
+        for i in range(self.num_agents):
+            input_tensor = tensor[:, i] # torch.Size([20])
+            input_tensor = input_tensor.unsqueeze(0)  # torch.Size([1, 20])
+            agent_output = self.mlp1(input_tensor)  # torch.Size([1, 128])
+            agent_outputs.append(agent_output.squeeze(0))  
+
+        agent_outputs = torch.stack(agent_outputs, dim=0)
+        pooled_output = torch.max(agent_outputs, dim=0).values
+        output = self.mlp2(pooled_output.unsqueeze(0)).squeeze(0)
+
+        return output
+    
 class MLPActorCritic(nn.Module):
     def __init__(self, observation_space, action_space, latent_dim=32,
                  hidden_sizes=(64, 64), activation=nn.LeakyReLU):
@@ -143,9 +164,13 @@ class MLPActorCritic(nn.Module):
 
         # build value function
         self.v = MLPCritic(latent_dim, hidden_sizes, activation)
+        self.N = 10
+        self.multiagent_processor =  MultiAgentProcessor(input_size=20, num_agents=10, hidden_sizes=hidden_sizes, output_size1=128, output_size2=16)
 
     def step(self, obs_his, act_his):
-        with torch.no_grad():
+        tensor = torch.zeros(20, self.N)
+        with torch.no_grad():  
+            output = self.multiagent_processor.process_tensor(tensor)
             act_recent = act_his[-1]
             obs_recent = obs_his[-1]
             obs_act_his = torch.cat((obs_his, act_his), dim=-1) 
